@@ -1,0 +1,1 @@
+export const backend_url = import.meta.env.backend_url || "http://localhost:3000";
