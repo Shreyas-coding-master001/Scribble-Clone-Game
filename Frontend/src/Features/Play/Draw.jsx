@@ -1,12 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { io } from "socket.io-client";
 import './Draw.scss';
-import { backend_url } from '../../API/backend.api';
+import { socket } from '../../API/backend.api';
 import { useState } from 'react';
+import useContext from "../../hooks/useContext.js";
 
-const socket = io(backend_url);
-
-const Draw = ({roomId="1233456", username="Unknown"}) => {
+const Draw = ({roomId="1233456"}) => {
+    const {username} = useContext();
 
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
