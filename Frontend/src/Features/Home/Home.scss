@@ -1,0 +1,218 @@
+// ----------------------------
+// Variables
+// ----------------------------
+$color-bg: #0f172a;
+$color-bg-light: #1e293b;
+$color-primary: #22d3ee;
+$color-primary-dark: #0891b2;
+$color-secondary: #fbbf24;
+$color-text: #f1f5f9;
+$color-text-muted: #94a3b8;
+$color-card-bg: rgba(255, 255, 255, 0.05);
+$radius: 12px;
+$transition: all 0.2s ease-in-out;
+
+$breakpoint-sm: 480px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+
+// ----------------------------
+// Mixins
+// ----------------------------
+@mixin flex($direction: row, $justify: center, $align: center, $gap: 0) {
+  display: flex;
+  flex-direction: $direction;
+  justify-content: $justify;
+  align-items: $align;
+  gap: $gap;
+}
+
+@mixin respond($breakpoint) {
+  @media (max-width: $breakpoint) {
+    @content;
+  }
+}
+
+// ----------------------------
+// Landing Page
+// ----------------------------
+.landing-page {
+  min-height: 100vh;
+  width: 100%;
+  background: linear-gradient(160deg, $color-bg 0%, #020617 100%);
+  color: $color-text;
+  @include flex(column, flex-start, center, 3rem);
+  padding: 3rem 1.5rem 4rem;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  * {
+    box-sizing: border-box;
+  }
+
+  // ----------------------------
+  // Hero / Start playing section
+  // ----------------------------
+  .start-playing {
+    width: 100%;
+    max-width: 600px;
+    @include flex(column, center, center, 2rem);
+    text-align: center;
+
+    .header {
+      h1 {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin: 0;
+        @include flex(row, center, center, 0.6rem);
+
+        span {
+          color: $color-secondary;
+          display: inline-flex;
+          transform: rotate(-15deg);
+        }
+
+        @include respond($breakpoint-md) {
+          font-size: 2rem;
+        }
+
+        @include respond($breakpoint-sm) {
+          font-size: 1.5rem;
+        }
+      }
+
+      .tagline {
+        margin-top: 0.5rem;
+        color: $color-text-muted;
+        font-size: 1.1rem;
+
+        @include respond($breakpoint-sm) {
+          font-size: 0.95rem;
+        }
+      }
+    }
+
+    .take-input {
+      width: 100%;
+      @include flex(column, center, center, 1rem);
+
+      input {
+        width: 100%;
+        max-width: 380px;
+        padding: 0.9rem 1.2rem;
+        border-radius: $radius;
+        border: 2px solid transparent;
+        background: $color-bg-light;
+        color: $color-text;
+        font-size: 1rem;
+        outline: none;
+        transition: $transition;
+
+        &::placeholder {
+          color: $color-text-muted;
+        }
+
+        &:focus {
+          border-color: $color-primary;
+          box-shadow: 0 0 0 3px rgba($color-primary, 0.25);
+        }
+      }
+
+      .btn-group {
+        width: 100%;
+        max-width: 380px;
+        @include flex(row, center, center, 1rem);
+
+        @include respond($breakpoint-sm) {
+          flex-direction: column;
+        }
+      }
+
+      .btn {
+        flex: 1;
+        padding: 0.9rem 1.2rem;
+        border: none;
+        border-radius: $radius;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: $transition;
+        white-space: nowrap;
+
+        @include respond($breakpoint-sm) {
+          width: 100%;
+        }
+
+        &:active {
+          transform: scale(0.97);
+        }
+      }
+
+      .btn-play {
+        background: $color-primary;
+        color: #002733;
+
+        &:hover {
+          background: $color-primary-dark;
+          color: $color-text;
+        }
+      }
+
+      .btn-private {
+        background: transparent;
+        color: $color-text;
+        border: 2px solid $color-primary;
+
+        &:hover {
+          background: rgba($color-primary, 0.1);
+        }
+      }
+    }
+  }
+
+  // ----------------------------
+  // Information section
+  // ----------------------------
+  .Information {
+    width: 100%;
+    max-width: 1000px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+
+    @include respond($breakpoint-lg) {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    @include respond($breakpoint-md) {
+      grid-template-columns: 1fr;
+    }
+
+    .section {
+      background: $color-card-bg;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: $radius;
+      padding: 1.5rem;
+      backdrop-filter: blur(6px);
+      transition: $transition;
+
+      &:hover {
+        transform: translateY(-4px);
+        border-color: rgba($color-primary, 0.4);
+      }
+
+      h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1.2rem;
+        color: $color-secondary;
+      }
+
+      p {
+        margin: 0;
+        color: $color-text-muted;
+        font-size: 0.95rem;
+        line-height: 1.6;
+      }
+    }
+  }
+}
