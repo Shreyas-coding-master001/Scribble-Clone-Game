@@ -1,4 +1,5 @@
 import React,{useEffect, useState} from 'react'
+import { useNavigate } from 'react-router-dom';
 import { BsPencilFill } from "react-icons/bs";
 import useContext from "../../hooks/useContext.js";
 import "./Home.scss";
@@ -6,15 +7,25 @@ import { socket } from '../../API/socket.io.js';
 
 const Home = () => {
   const { username, setUsername } = useContext();
+  const navigate = useNavigate();
 
   useEffect(() => {
     
   }, []);
 
   const handlePlay = () => {
-    if (!username.trim()) return;
+    if (!username.trim()) {
+      alert("Please enter a nickname before joining a public room.");
+      return;
+    }
     // TODO: hook this up to your join-public-room logic / socket call
-    console.log("Joining public room as:", username);
+    socket.emit("create-room", { username });
+
+    socket.on("room-created", ({ roomID, name }) => {
+      console.log(`Room created with ID: ${roomID} for user: ${name}`);
+      
+      navigate(`/play`, { state: { username: name } });
+    });
   };
  
   const handleCreatePrivateRoom = () => {
