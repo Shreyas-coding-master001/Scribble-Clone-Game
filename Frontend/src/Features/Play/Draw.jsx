@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import './Draw.scss';
-import { socket } from '../../API/backend.api';
+import {socket} from "../../API/socket.io.js";
 import { useState } from 'react';
 import useContext from "../../hooks/useContext.js";
 
@@ -13,11 +13,14 @@ const Draw = ({roomId="1233456"}) => {
     const paintSize = useRef(10);
     const paintColor = useRef("white");
     const chatMessagesRef = useRef(null);
+    const chatMuteTimeoutRef = useRef(null);
     
     const [players, setPlayers] = useState([]);
+    const [correctGuessers, setCorrectGuessers] = useState(new Set());
     const [currentDrawer, setCurrentDrawer] = useState({});
     const [messages, setMessages] = useState([]);
     const [chatInput, setChatInput] = useState("");
+    const [chatMuted, setChatMuted] = useState(false);
     const [currentWord, setCurrentWord] = useState("");
     const [maskedWord, setMaskedWord] = useState("");
 
@@ -65,12 +68,29 @@ const Draw = ({roomId="1233456"}) => {
         socket.emit("join-room", { roomID: roomId, name: username });
 
         socket.on("chat-message", (message) =>  {
+          
           setMessages((prev) => [...prev, message]);
+        });
+
+        socket.on("correct-guess", ({ playerId }) => {
+            setCorrectGuessers((prev) => new Set(prev).add(playerId));
+        });
+
+        socket.on("chat-muted", ({ durationMs, remainingMs }) => {
+            window.clearTimeout(chatMuteTimeoutRef.current);
+            setChatMuted(true);
+            chatMuteTimeoutRef.current = window.setTimeout(
+                () => setChatMuted(false),
+                remainingMs ?? durationMs
+            );
         });
 
         socket.on('room-update', (room) => {
             setPlayers(room.players);
+            setCorrectGuessers(new Set(room.correctGuessers || []));
             setCurrentDrawer(room.currentDrawer);
+            setMaskedWord(room.currentWord ? room.currentWord.replace(/./g, '_') : "");
+            setCurrentWord(room.currentWord || "");
 
             console.log(room);
         });
@@ -88,10 +108,13 @@ const Draw = ({roomId="1233456"}) => {
           socket.off('room-update');
           socket.off('draw');
           socket.off('chat-message');
+          socket.off('correct-guess');
+          socket.off('chat-muted');
           socket.off("drawerChanged");
           socket.off("wordToGuess");
           socket.off("wordHint");
           socket.off('clear');
+          window.clearTimeout(chatMuteTimeoutRef.current);
 
           // socket.disconnect();
         };
@@ -183,7 +206,7 @@ const Draw = ({roomId="1233456"}) => {
 
     function handleSendMessage(e) {
         e.preventDefault();
-        if (!chatInput.trim()) return;
+        if (chatMuted || !chatInput.trim()) return;
 
         console.log("Message send to Backend");
         
@@ -202,7 +225,7 @@ const Draw = ({roomId="1233456"}) => {
             <div className="Players-names">
                 {players.map((player, idx) => {
                   return(
-                    <div className="player" key={idx}>
+                    <div className={`player${correctGuessers.has(player.id) ? " correct-guesser" : ""}`} key={player.id || idx}>
                       <div className="left">
                         <div className="profile-photo">
                           <img src="https://ik.imagekit.io/t7oiyoofv/images.jpg?updatedAt=1773596800932" alt="Default image" />
@@ -294,11 +317,12 @@ const Draw = ({roomId="1233456"}) => {
             <form className="chat-input-form" onSubmit={handleSendMessage}>
               <input
                 type="text"
-                placeholder="Type a guess or message..."
+                placeholder={chatMuted ? "Chat locked briefly after a correct guess" : "Type a guess or message..."}
                 value={chatInput}
+                disabled={chatMuted}
                 onChange={(e) => setChatInput(e.target.value)}
               />
-              <button type="submit">Send</button>
+              <button type="submit" disabled={chatMuted}>Send</button>
             </form>
           </div>
         </div>

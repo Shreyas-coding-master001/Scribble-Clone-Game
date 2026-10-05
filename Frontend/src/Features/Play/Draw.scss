@@ -194,6 +194,12 @@
             border: 2px solid black;
             padding: 0.5rem;
 
+            &.correct-guesser {
+                border-color: #168a4a;
+                background-color: #d9f6e5;
+                box-shadow: 0 0 0 2px rgba(22, 138, 74, 0.35);
+            }
+
             .left{
                 width: 40%;
                 overflow: hidden;
@@ -288,6 +294,11 @@
             &:focus {
                 box-shadow: 0 0 0 2px #4fa8ff;
             }
+
+            &:disabled {
+                cursor: not-allowed;
+                opacity: 0.65;
+            }
         }
 
         button {
@@ -306,6 +317,12 @@
 
             &:active {
                 transform: scale(0.97);
+            }
+
+            &:disabled {
+                background-color: #666;
+                cursor: not-allowed;
+                transform: none;
             }
         }
     }
