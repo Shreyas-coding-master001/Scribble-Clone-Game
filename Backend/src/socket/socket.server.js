@@ -3,6 +3,9 @@ import config from "../config/config.js";
 
 let io;
 
+const CHAT_MUTE_MS = 10_000;
+const chatMutedUntil = new Map();
+
 const rooms = [],
 words = [
   "apple", "banana", "guitar", "elephant", "mountain",
@@ -11,7 +14,7 @@ words = [
   "waterfall", "butterfly", "telescope", "pyramid", "octopus",
   "snowman", "lighthouse", "cactus", "dolphin", "kangaroo",
   "helicopter", "campfire", "spider", "windmill", "jellyfish",
-  "skateboard", "volcano2", "trumpet", "pineapple", "scarecrow",
+  "skateboard", "volcano", "trumpet", "pineapple", "scarecrow",
   "compass", "hedgehog", "parachute", "flamingo", "chandelier",
   "submarine", "cupcake", "cheetah", "hammer", "igloo",
   "jacket", "kite", "lantern", "mushroom", "necklace"
@@ -20,8 +23,8 @@ set = new Set();
 
 function startTurnTImer(roomID) {
     const room = rooms[roomID];
+    let randomWord = getRandomWord();
 
-    
     if(!room) return;
     
     if(room.intervalID) clearInterval(room.intervalID);
@@ -33,12 +36,18 @@ function startTurnTImer(roomID) {
 
     const randomIndex = Math.floor(Math.random() * room.players.length);
     room.currentDrawer = room.players[randomIndex];
+    room.currentWord = randomWord;
+    room.correctGuessers = [];
+
 
     io.to(roomID).emit("room-update", room);
 
     room.intervalID = setInterval(() => {
         
         console.log("In Loop");
+        randomWord = getRandomWord();
+        room.currentWord = randomWord;
+        room.correctGuessers = [];
         if (!room || room.players.length < 1) {
             clearInterval(room?.intervalId);
             return;
@@ -79,23 +88,29 @@ function initServer(httpServer) {
     io.on("connection", (socket) => {
         console.log("A new User Connected to Socket : ", socket.id);
 
-        socket.on("create-room", () => {
-            while(true) {
-                const roomID = Math.floor(Math.random() * 999999);
-                
-                if(!rooms[roomID]) {
-                    rooms[roomID] = { players : [], currentDrawer : null, intervalId : null };
+        socket.on("create-room", ({ username }) => {
+            // while(true) {
+                let roomID = Math.floor(Math.random() * 999999);
+                const room = rooms.find(room => room?.players.length < 7);
 
-                    rooms[roomID].players.push({id: socket.id, name : name});
+                if (room) {
+                    room.players.push({id: socket.id, name : username});
+                    roomID = rooms.indexOf(room);
+                }
+                else if(!rooms[roomID]) {
+                    rooms[roomID] = { players : [], currentDrawer : null, currentWord: null, correctGuessers: [], intervalId : null };
+                    rooms[roomID].players.push({id: socket.id, name : username});
                 }
 
-            }
+                socket.emit("room-created", { roomID, name : username });
+
+            // }
         });
 
         socket.on("join-room", ({ roomID, name }) => {
             socket.join(roomID)
 
-            rooms[roomID] ??= { players : [], currentDrawer : null, intervalId : null };     //Simply rooms[roomID] = rooms[roomID] ?? { players : [], currentDrawerId : null }
+            rooms[roomID] ??= { players : [], currentDrawer : null, correctGuessers: [], intervalId : null };     //Simply rooms[roomID] = rooms[roomID] ?? { players : [], currentDrawerId : null }
             //room[roomID] = rooms[ID] if some value OR this { players : [], currentDrawerId : null };  
 
 
@@ -116,25 +131,50 @@ function initServer(httpServer) {
 
         socket.on("chat-message", ({roomId, text}) => {
             if(!rooms[roomId]) return;
-            
-            
-            console.log("In Chat-messages");
+
+            let mutedUntil;
+
             const player = rooms[roomId].players.find(p => p.id === socket.id);
+            
             if (!player) {
-                // Optional: Handle the case where the player or room wasn't found
                 console.log(`Room or player not found for ID: ${roomId}`);
                 return; 
+            }else if(player.id == rooms[roomId].currentDrawer.id) {
+                mutedUntil = chatMutedUntil.get(socket.id) || 0;
+                
+                socket.emit("chat-muted", { remainingMs: mutedUntil - Date.now() });
+                return;
             }
 
-            const message = { username: player?.name || "Unknown", text: text };
+            if (typeof text !== "string" || !text.trim()) return;
 
-            console.log(message);
-            
+            mutedUntil = chatMutedUntil.get(socket.id) || 0;
+            if (mutedUntil > Date.now()) {
+                socket.emit("chat-muted", { remainingMs: mutedUntil - Date.now() });
+                return;
+            }
+
+            const room = rooms[roomId];
+            const message = { username: player.name, text: text.trim() };
+
+            if (message.text.toLowerCase() === room.currentWord?.toLowerCase()) {
+                chatMutedUntil.set(socket.id, Date.now() + CHAT_MUTE_MS);
+                room.correctGuessers ??= [];
+                room.correctGuessers.push(player.id);
+                io.to(roomId).emit("correct-guess", {
+                    username: player.name,
+                    playerId: player.id,
+                    word: room.currentWord
+                });
+                socket.emit("chat-muted", { durationMs: CHAT_MUTE_MS });
+                return;
+            }
 
             io.to(roomId).emit("chat-message", message);
         });
 
         socket.on("disconnect", () => {
+            chatMutedUntil.delete(socket.id);
             for (const roomId in rooms) {
                 const room = rooms[roomId];
                 room.players = room.players.filter(p => p.id !== socket.id);
