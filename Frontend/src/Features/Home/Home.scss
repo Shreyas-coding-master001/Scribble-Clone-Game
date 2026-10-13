@@ -216,3 +216,96 @@ $breakpoint-lg: 1024px;
     }
   }
 }
+
+.private-room-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.78);
+
+  .private-room-modal {
+    position: relative;
+    width: min(100%, 420px);
+    padding: 2rem;
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    border-radius: $radius;
+    background: $color-bg-light;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    color: $color-text;
+
+    h2 {
+      margin: 0 2rem 0.5rem 0;
+      color: $color-secondary;
+    }
+
+    > p {
+      margin: 0 0 1.25rem;
+      color: $color-text-muted;
+      line-height: 1.5;
+    }
+
+    .private-room-close {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.9rem;
+      border: 0;
+      background: transparent;
+      color: $color-text-muted;
+      font-size: 1.75rem;
+      cursor: pointer;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border: 0;
+      border-radius: $radius;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-create-room {
+      background: $color-primary;
+      color: #002733;
+    }
+
+    .join-private-room-form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      margin-top: 1.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+
+      label {
+        font-weight: 600;
+      }
+
+      input {
+        width: 100%;
+        padding: 0.8rem 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: $radius;
+        background: $color-bg;
+        color: $color-text;
+        font-size: 1rem;
+      }
+
+      .btn-join-room {
+        background: transparent;
+        border: 2px solid $color-primary;
+        color: $color-text;
+      }
+    }
+
+    .private-room-error {
+      margin: 1rem 0 0;
+      color: #fca5a5;
+    }
+  }
+}
