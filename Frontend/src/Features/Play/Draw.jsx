@@ -2,16 +2,20 @@ import React, { useEffect, useRef } from 'react';
 import './Draw.scss';
 import {socket} from "../../API/socket.io.js";
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import useContext from "../../hooks/useContext.js";
 
 const Draw = ({roomId="1233456"}) => {
     const {username} = useContext();
+    const location = useLocation();
+    const activeRoomId = location.state?.roomID ?? roomId;
 
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const isDrawing = useRef(false);
     const paintSize = useRef(10);
     const paintColor = useRef("white");
+    const isEraser = useRef(false);
     const chatMessagesRef = useRef(null);
     const chatMuteTimeoutRef = useRef(null);
     
@@ -23,8 +27,15 @@ const Draw = ({roomId="1233456"}) => {
     const [chatMuted, setChatMuted] = useState(false);
     const [currentWord, setCurrentWord] = useState("");
     const [maskedWord, setMaskedWord] = useState("");
+    const [roundEndsAt, setRoundEndsAt] = useState(null);
+    const [timeLeft, setTimeLeft] = useState(0);
+    const [joinError, setJoinError] = useState("");
 
     const isMyTurn = currentDrawer?.id === socket.id;
+
+    const handleNewMessage = (message) =>  {
+      setMessages((prev) => [...prev, message]);      
+    }
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -61,16 +72,13 @@ const Draw = ({roomId="1233456"}) => {
 
     //Socket.io ID
     useEffect(() => {
+        const handleRoomJoinError = ({ message }) => setJoinError(message);
+
         socket.on("connect", () => {
           console.log(`User Connected to Socket`);
         });
 
-        socket.emit("join-room", { roomID: roomId, name: username });
-
-        socket.on("chat-message", (message) =>  {
-          
-          setMessages((prev) => [...prev, message]);
-        });
+        socket.on("chat-messages", handleNewMessage);
 
         socket.on("correct-guess", ({ playerId }) => {
             setCorrectGuessers((prev) => new Set(prev).add(playerId));
@@ -91,17 +99,19 @@ const Draw = ({roomId="1233456"}) => {
             setCurrentDrawer(room.currentDrawer);
             setMaskedWord(room.currentWord ? room.currentWord.replace(/./g, '_') : "");
             setCurrentWord(room.currentWord || "");
-
-            console.log(room);
+            setRoundEndsAt(room.roundEndsAt || null);
         });
 
-        socket.on('draw', ({ x, y, color, size }) => {
-            drawDot(x, y, color, size);
+        socket.on('draw', ({ x, y, color, size, isEraser: remoteIsEraser }) => {
+            drawDot(x, y, color, size, remoteIsEraser);
         });
+        socket.on("room-join-error", handleRoomJoinError);
 
         socket.on("drawerChanged", (drawer) => setCurrentDrawer(drawer));
         socket.on("wordToGuess", (word) => setCurrentWord(word));
         socket.on("wordHint", (hint) => setMaskedWord(hint));
+
+        socket.emit("join-room", { roomID: activeRoomId, name: username });
 
         return () => {
           socket.off('connect');
@@ -113,12 +123,27 @@ const Draw = ({roomId="1233456"}) => {
           socket.off("drawerChanged");
           socket.off("wordToGuess");
           socket.off("wordHint");
+          socket.off("room-join-error", handleRoomJoinError);
           socket.off('clear');
           window.clearTimeout(chatMuteTimeoutRef.current);
 
           // socket.disconnect();
         };
-    }, [roomId, username]);
+    }, [activeRoomId, username]);
+
+    useEffect(() => {
+        if (!roundEndsAt) {
+            setTimeLeft(0);
+            return;
+        }
+
+        const updateTimeLeft = () => {
+            setTimeLeft(Math.max(0, Math.ceil((roundEndsAt - Date.now()) / 1000)));
+        };
+        updateTimeLeft();
+        const timer = window.setInterval(updateTimeLeft, 1000);
+        return () => window.clearInterval(timer);
+    }, [roundEndsAt]);
 
     useEffect(() => {
         if (chatMessagesRef.current) {
@@ -130,7 +155,7 @@ const Draw = ({roomId="1233456"}) => {
     }, [messages]);
 
     // shared drawing logic used for both local + remote strokes
-    function drawDot(xRatio, yRatio, color, size) {
+    function drawDot(xRatio, yRatio, color, size, erase = false) {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -139,8 +164,9 @@ const Draw = ({roomId="1233456"}) => {
         const y = yRatio * rect.height;
 
         ctx.beginPath();
-        ctx.fillStyle =  color ?? paintColor.current;
-        ctx.arc(x, y, paintSize.current, 0, Math.PI * 2, true);
+        ctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
+        ctx.fillStyle = color ?? paintColor.current;
+        ctx.arc(x, y, size ?? paintSize.current, 0, Math.PI * 2, true);
         ctx.fill();
     }
     
@@ -157,16 +183,15 @@ const Draw = ({roomId="1233456"}) => {
         const xRatio = x / board.width;
         const yRatio = y / board.height;
 
-        drawDot(xRatio, yRatio, paintColor.current, Math.PI * 2);
-        
-        console.log("Above Draw");
+        drawDot(xRatio, yRatio, paintColor.current, paintSize.current, isEraser.current);
         
         socket.emit("draw", {
-          roomId, 
+          roomId: activeRoomId,
           x: xRatio, 
           y: yRatio, 
           color: paintColor.current, 
-          size: Math.PI * 2 
+          size: paintSize.current,
+          isEraser: isEraser.current
         });
     }
 
@@ -195,6 +220,7 @@ const Draw = ({roomId="1233456"}) => {
     function ColorSelection(e){
       if (!isMyTurn) return;
       const classNames = e.target.className.split(" ");
+      isEraser.current = false;
       if(classNames[1] === "green"){
         paintColor.current = "rgb(0, 183, 0)";
       }else if(classNames[1] === "light-blue"){
@@ -204,13 +230,22 @@ const Draw = ({roomId="1233456"}) => {
       }
     }
 
+    function SelectEraser() {
+      if (!isMyTurn) return;
+      isEraser.current = true;
+    }
+
+    const formattedTime = `${Math.floor(timeLeft / 60)
+      .toString()
+      .padStart(2, "0")}:${(timeLeft % 60).toString().padStart(2, "0")}`;
+
     function handleSendMessage(e) {
         e.preventDefault();
         if (chatMuted || !chatInput.trim()) return;
 
-        console.log("Message send to Backend");
+        console.log(`Message sent to Backend: ${activeRoomId}, ${chatInput.trim()}`);
         
-        socket.emit("chat-message", { roomId, text: chatInput.trim() });
+        socket.emit("chat-message", { roomId: activeRoomId, text: chatInput.trim() });
         setChatInput("");
     }
 
@@ -245,6 +280,13 @@ const Draw = ({roomId="1233456"}) => {
           ref={containerRef}
           >
             <div id="word-guess">
+              <div className="room-round-info">
+                <span className="room-code">Room: {activeRoomId}</span>
+                <span className="round-timer" aria-label={`Time remaining ${formattedTime}`}>
+                  {formattedTime}
+                </span>
+              </div>
+              {joinError && <p className="room-join-error" role="alert">{joinError}</p>}
               {currentDrawer?.id === socket.id ? (
                   <div className="drawer-status you-drawing">
                     You are the Current Drawing Person
@@ -297,6 +339,9 @@ const Draw = ({roomId="1233456"}) => {
               <div className="paint purple" onClick={ColorSelection} ></div>
               <div className="paint gray" onClick={ColorSelection} ></div>
               <div className="paint black" onClick={ColorSelection} ></div>
+              <button className="eraser-tool" type="button" onClick={SelectEraser}>
+                Eraser
+              </button>
             </div>
           </div>
 
@@ -330,129 +375,3 @@ const Draw = ({roomId="1233456"}) => {
 };
 
 export default Draw;
-
-// import React, { useEffect, useRef, useState } from 'react';
-// import { io } from 'socket.io-client';
-// import './Draw.scss';
-
-// const socket = io('http://localhost:3000'); // move to env var in real app
-
-// const Draw = ({ roomId = "123456", userName="Yash" }) => {
-//     const canvasRef = useRef(null);
-//     const containerRef = useRef(null);
-//     const isDrawing = useRef(false);
-//     const paintSize = useRef(5);
-//     const paintColor = useRef("white");
-
-//     const [players, setPlayers] = useState([]);
-//     const [currentDrawerId, setCurrentDrawerId] = useState(null);
-//     const myId = useRef(null);
-
-//     const isMyTurn = myId.current && myId.current === currentDrawerId;
-
-//     useEffect(() => {
-//         socket.on('connect', () => {
-//             myId.current = socket.id;
-//             socket.emit('join-room', { roomId, name: userName });
-//         });
-
-//         socket.on('room-update', (room) => {
-//             setPlayers(room.players);
-//             setCurrentDrawerId(room.currentDrawerId);
-//         });
-
-//         socket.on('draw', ({ x, y, color, size }) => {
-//             drawDot(x, y, color, size);
-//         });
-
-//         socket.on('clear', () => {
-//             const canvas = canvasRef.current;
-//             const ctx = canvas.getContext('2d');
-//             ctx.clearRect(0, 0, canvas.width, canvas.height);
-//         });
-
-//         return () => {
-//             socket.off('connect');
-//             socket.off('room-update');
-//             socket.off('draw');
-//             socket.off('clear');
-//         };
-//     }, [roomId, userName]);
-
-//     // shared drawing logic used for both local + remote strokes
-//     function drawDot(xRatio, yRatio, color, size) {
-//         const canvas = canvasRef.current;
-//         if (!canvas) return;
-//         const ctx = canvas.getContext('2d');
-//         const rect = canvas.getBoundingClientRect();
-//         const x = xRatio * rect.width;
-//         const y = yRatio * rect.height;
-
-//         ctx.beginPath();
-//         ctx.fillStyle = color;
-//         ctx.arc(x, y, size, 0, Math.PI * 2, true);
-//         ctx.fill();
-//     }
-
-//     function DrawOnPixel(event) {
-//         if (!isDrawing.current || !isMyTurn) return; // gate on turn
-
-//         const canvas = canvasRef.current;
-//         const board = canvas.getBoundingClientRect();
-//         const x = event.clientX - board.left;
-//         const y = event.clientY - board.top;
-//         const xRatio = x / board.width;
-//         const yRatio = y / board.height;
-
-//         drawDot(xRatio, yRatio, paintColor.current, paintSize.current);
-
-//         socket.emit('draw', {
-//             roomId,
-//             x: xRatio,
-//             y: yRatio,
-//             color: paintColor.current,
-//             size: paintSize.current,
-//         });
-//     }
-
-//     function StartDrawing(event) {
-//         if (!isMyTurn) return; // block non-drawers from starting a stroke
-//         isDrawing.current = true;
-//         canvasRef.current?.setPointerCapture(event.pointerId);
-//     }
-
-//     function StopDrawing(event) {
-//         isDrawing.current = false;
-//         try { canvasRef.current?.releasePointerCapture(event.pointerId); } catch {}
-//     }
-
-//     // ...rest of your resize/color logic stays the same
-
-//     return (
-//         <div id="Drawing-area">
-//             {!isMyTurn && (
-//                 <div className="spectator-banner">
-//                     {players.find(p => p.id === currentDrawerId)?.name || "Someone"} is drawing…
-//                 </div>
-//             )}
-//             <div
-//                 className="board-container"
-//                 ref={containerRef}
-//                 style={{ pointerEvents: isMyTurn ? 'auto' : 'none' }} // extra UX safeguard
-//             >
-//                 <canvas
-//                     ref={canvasRef}
-//                     id="board"
-//                     onPointerDown={StartDrawing}
-//                     onPointerUp={StopDrawing}
-//                     onPointerMove={DrawOnPixel}
-//                     onPointerLeave={StopDrawing}
-//                     onPointerCancel={StopDrawing}
-//                 />
-//                 {/* paints div etc, maybe also hidden/disabled when !isMyTurn */}
-//             </div>
-//         </div>
-//     );
-// };
-
-// export default Draw;

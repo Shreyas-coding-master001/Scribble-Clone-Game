@@ -52,6 +52,16 @@
             scale: 0.95;
         }
 
+        .eraser-tool {
+            padding: 0.4rem 0.7rem;
+            border: 1px solid #555;
+            border-radius: 6px;
+            background: #fff;
+            color: #222;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
         .white{
             background-color: #fff;
         }
@@ -99,6 +109,38 @@
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         flex-wrap: wrap;
         margin-bottom: 1rem;
+
+        .room-round-info {
+            flex-basis: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .room-code {
+            color: #555;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .round-timer {
+            min-width: 72px;
+            padding: 5px 10px;
+            border-radius: 8px;
+            background: #212121;
+            color: #fff;
+            font-family: "Courier New", monospace;
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .room-join-error {
+            flex-basis: 100%;
+            margin: 0;
+            color: #b42318;
+            font-weight: 600;
+        }
 
         .drawer-status {
             display: flex;
