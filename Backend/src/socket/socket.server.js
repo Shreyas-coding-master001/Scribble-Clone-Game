@@ -4,6 +4,7 @@ import config from "../config/config.js";
 let io;
 
 const CHAT_MUTE_MS = 10_000;
+const TURN_DURATION_MS = 3 * 60 * 1000;
 const chatMutedUntil = new Map();
 
 const rooms = [],
@@ -18,50 +19,55 @@ words = [
   "compass", "hedgehog", "parachute", "flamingo", "chandelier",
   "submarine", "cupcake", "cheetah", "hammer", "igloo",
   "jacket", "kite", "lantern", "mushroom", "necklace"
-],
-set = new Set();
+];
 
-function startTurnTImer(roomID) {
+function createRoom(isPrivate = false) {
+    return {
+        players: [],
+        currentDrawer: null,
+        currentWord: null,
+        correctGuessers: [],
+        intervalId: null,
+        roundEndsAt: null,
+        isPrivate
+    };
+}
+
+function emitRoomUpdate(roomID, room) {
+    io.to(String(roomID)).emit("room-update", {
+        players: room.players,
+        currentDrawer: room.currentDrawer,
+        currentWord: room.currentWord,
+        correctGuessers: room.correctGuessers,
+        roundEndsAt: room.roundEndsAt,
+        roundDurationMs: TURN_DURATION_MS
+    });
+}
+
+function startTurnTimer(roomID) {
     const room = rooms[roomID];
-    let randomWord = getRandomWord();
+    if (!room) return;
 
-    if(!room) return;
-    
-    if(room.intervalID) clearInterval(room.intervalID);
+    if (room.intervalId) clearInterval(room.intervalId);
 
-    if (!room || room.players.length < 1) {
-        clearInterval(room?.intervalId);
-        return;
-    }
-
-    const randomIndex = Math.floor(Math.random() * room.players.length);
-    room.currentDrawer = room.players[randomIndex];
-    room.currentWord = randomWord;
-    room.correctGuessers = [];
-
-
-    io.to(roomID).emit("room-update", room);
-
-    room.intervalID = setInterval(() => {
-        
-        console.log("In Loop");
-        randomWord = getRandomWord();
-        room.currentWord = randomWord;
-        room.correctGuessers = [];
-        if (!room || room.players.length < 1) {
-            clearInterval(room?.intervalId);
+    const startNextTurn = () => {
+        if (room.players.length < 1) {
+            clearInterval(room.intervalId);
+            room.intervalId = null;
+            room.roundEndsAt = null;
             return;
         }
 
         const randomIndex = Math.floor(Math.random() * room.players.length);
         room.currentDrawer = room.players[randomIndex];
+        room.currentWord = getRandomWord();
+        room.correctGuessers = [];
+        room.roundEndsAt = Date.now() + TURN_DURATION_MS;
+        emitRoomUpdate(roomID, room);
+    };
 
-        console.log(room);
-        
-
-        io.to(roomID).emit("room-update", room);
-
-    },  3 * 60* 1000);
+    startNextTurn();
+    room.intervalId = setInterval(startNextTurn, TURN_DURATION_MS);
 }
 
 function getRandomWord() {
@@ -89,44 +95,66 @@ function initServer(httpServer) {
         console.log("A new User Connected to Socket : ", socket.id);
 
         socket.on("create-room", ({ username }) => {
-            // while(true) {
-                let roomID = Math.floor(Math.random() * 999999);
-                const room = rooms.find(room => room?.players.length < 7);
+            const room = rooms.find((candidate) =>
+                candidate && !candidate.isPrivate && candidate.players.length < 7
+            );
+            let roomID;
 
-                if (room) {
-                    room.players.push({id: socket.id, name : username});
-                    roomID = rooms.indexOf(room);
-                }
-                else if(!rooms[roomID]) {
-                    rooms[roomID] = { players : [], currentDrawer : null, currentWord: null, correctGuessers: [], intervalId : null };
-                    rooms[roomID].players.push({id: socket.id, name : username});
-                }
+            if (room) {
+                roomID = rooms.indexOf(room);
+            } else {
+                do {
+                    roomID = Math.floor(Math.random() * 999999);
+                } while (rooms[roomID]);
+                rooms[roomID] = createRoom();
+            }
 
-                socket.emit("room-created", { roomID, name : username });
+            rooms[roomID].players.push({ id: socket.id, name: username });
+            // socket.join(String(roomID));
+            socket.emit("room-created", { roomID, name: username });
+        });
 
-            // }
+        socket.on("join-private-room", ({ roomID, username }) => {
+            const roomKey = String(roomID ?? "").trim();
+            const room = rooms[roomKey];
+
+            if (!room?.isPrivate) {
+                socket.emit("private-room-error", { message: "That private room does not exist." });
+                return;
+            }
+            if (room.players.length >= 7) {
+                socket.emit("private-room-error", { message: "That room is full." });
+                return;
+            }
+
+            socket.emit("private-room-joined", { roomID: roomKey, username });
         });
 
         socket.on("join-room", ({ roomID, name }) => {
-            socket.join(roomID)
+            const roomKey = String(roomID ?? "").trim();
+            const room = rooms[roomKey];
 
-            rooms[roomID] ??= { players : [], currentDrawer : null, correctGuessers: [], intervalId : null };     //Simply rooms[roomID] = rooms[roomID] ?? { players : [], currentDrawerId : null }
-            //room[roomID] = rooms[ID] if some value OR this { players : [], currentDrawerId : null };  
+            if (!room) {
+                socket.emit("room-join-error", { message: "That room is no longer available." });
+                return;
+            }
 
+            const existingPlayer = room.players.find((player) => player.id === socket.id);
+            if (!existingPlayer && room.players.length >= 7) {
+                socket.emit("room-join-error", { message: "That room is full." });
+                return;
+            }
 
-            if(!set.has(socket.id)) 
-            rooms[roomID].players.push({id: socket.id, name : name});
-            
-            set.add(socket.id);
-        
-            startTurnTImer(roomID);
+            socket.join(roomKey);
+            console.log(`Socket ${socket.id} joined room ${roomKey}`);
+            if (!existingPlayer) room.players.push({ id: socket.id, name });
+            if (!room.intervalId) startTurnTimer(roomKey);
         });
 
-        socket.on("draw", ({ roomId, x, y, color, size }) => {
-            // if(!rooms[roomId] ) return;
-            if(!rooms[roomId] || rooms[roomId]?.currentDrawer.id !== socket.id) return;
-        
-            socket.to(roomId).emit("draw", {x, y, color, size});
+        socket.on("draw", ({ roomId, x, y, color, size, isEraser }) => {
+            if (!rooms[roomId] || rooms[roomId]?.currentDrawer?.id !== socket.id) return;
+
+            socket.to(String(roomId)).emit("draw", { x, y, color, size, isEraser });
         });
 
         socket.on("chat-message", ({roomId, text}) => {
@@ -135,18 +163,22 @@ function initServer(httpServer) {
             let mutedUntil;
 
             const player = rooms[roomId].players.find(p => p.id === socket.id);
-            
+
             if (!player) {
                 console.log(`Room or player not found for ID: ${roomId}`);
                 return; 
-            }else if(player.id == rooms[roomId].currentDrawer.id) {
+            } else if (player.id === rooms[roomId].currentDrawer?.id) {
                 mutedUntil = chatMutedUntil.get(socket.id) || 0;
                 
                 socket.emit("chat-muted", { remainingMs: mutedUntil - Date.now() });
                 return;
             }
 
+            
+            
             if (typeof text !== "string" || !text.trim()) return;
+            
+            
 
             mutedUntil = chatMutedUntil.get(socket.id) || 0;
             if (mutedUntil > Date.now()) {
@@ -161,7 +193,7 @@ function initServer(httpServer) {
                 chatMutedUntil.set(socket.id, Date.now() + CHAT_MUTE_MS);
                 room.correctGuessers ??= [];
                 room.correctGuessers.push(player.id);
-                io.to(roomId).emit("correct-guess", {
+                io.to(String(roomId)).emit("correct-guess", {
                     username: player.name,
                     playerId: player.id,
                     word: room.currentWord
@@ -170,7 +202,18 @@ function initServer(httpServer) {
                 return;
             }
 
-            io.to(roomId).emit("chat-message", message);
+            
+            io.to(String(roomId)).emit("chat-messages", message);
+        });
+
+        socket.on("create-private-room", ({ username }) => {
+            let roomID;
+            do {
+                roomID = Math.floor(Math.random() * 999999);
+            } while (rooms[roomID]);
+            rooms[roomID] = createRoom(true);
+
+            socket.emit("private-room-created", { roomID, username });
         });
 
         socket.on("disconnect", () => {
@@ -185,11 +228,11 @@ function initServer(httpServer) {
                     continue;
                 }
 
-                if (room.currentDrawerId === socket.id) {
-                    room.currentDrawerId = room.players[0].id;
+                if (room.currentDrawer?.id === socket.id) {
+                    startTurnTimer(roomId);
+                } else {
+                    emitRoomUpdate(roomId, room);
                 }
-
-                io.to(roomId).emit("room-update", room);
 
                 console.log(`User Disconnected ${socket.id}`);
             }
