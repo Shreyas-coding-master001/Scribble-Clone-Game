@@ -1,50 +1,83 @@
-# Skribble Drawing Game
+# Scribble Clone Game
 
-A multiplayer drawing-and-guessing game prototype built with React and Socket.IO. Players can draw on a shared canvas, choose a brush color, and exchange chat messages in a room. The project is under active development; room creation and the home-page game actions are not fully wired up yet.
+A multiplayer drawing-and-guessing game inspired by classic browser-based party games. This project combines a React frontend with a Node.js + Socket.IO backend to let players join rooms, draw on a shared canvas, and chat while trying to guess the word.
 
-## Technology
+## Features
 
-- Frontend: React 19, Vite, React Router, and Sass
-- Backend: Node.js, Express, and Socket.IO
-- Realtime events: Socket.IO
+- Player nickname flow on the landing screen
+- Public room creation and room joining
+- Private room creation and join flow
+- Shared whiteboard drawing with brush color and eraser support
+- Real-time chat with guess interactions
+- Basic room state syncing for players, drawers, and round data
+- Responsive single-page frontend built with Vite + React
+
+## Tech Stack
+
+- Frontend: React 19, Vite, React Router, Sass
+- Backend: Node.js, Express, Socket.IO
+- Realtime communication: Socket.IO
+- Environment configuration: dotenv
 
 ## Project Structure
 
 ```text
-Backend/
-	server.js                 HTTP and Socket.IO server entry point
-	src/app.js                Express app and health endpoint
-	src/config/config.js      Environment-based server configuration
-	src/socket/socket.server.js
-														Room, drawing, and chat event handlers
-Frontend/
-	src/Features/Home/        Nickname and landing screen
-	src/Features/Play/        Drawing canvas, player list, and chat
-	src/API/                  Backend and Socket.IO client setup
+Drawing-Project/
+├── Backend/
+│   ├── server.js                    # Socket.IO and HTTP server startup
+│   ├── src/
+│   │   ├── app.js                  # Express app + health route
+│   │   ├── config/
+│   │   │   └── config.js           # Environment configuration
+│   │   └── socket/
+│   │       └── socket.server.js    # Room, drawing, and chat logic
+│   ├── .env                        # Local backend environment variables
+│   ├── package.json
+│   └── package-lock.json
+├── Frontend/
+│   ├── src/
+│   │   ├── Features/
+│   │   │   ├── Home/
+│   │   │   └── Play/
+│   │   ├── API/
+│   │   ├── Routes/
+│   │   ├── hooks/
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
+├── README.md
+├── ReadMe.md
+└── .gitignore
 ```
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 20+
 - npm
 
-## Run Locally
+## Local Setup
 
-Install dependencies in both applications:
+1. Clone the repository and open it in your terminal.
+2. Install dependencies for both apps:
 
 ```bash
 cd Backend
 npm install
+
 cd ../Frontend
 npm install
 ```
 
-Create `Backend/.env` with the backend port and the frontend origin:
+3. Create a `.env` file in the `Backend` directory:
 
 ```env
 PORT=3000
 frontend_URL=http://localhost:5173
 ```
+
+## Run the App
 
 Start the backend in one terminal:
 
@@ -53,30 +86,40 @@ cd Backend
 npm run dev
 ```
 
-Start the Vite development server in a second terminal:
+Start the frontend in a second terminal:
 
 ```bash
 cd Frontend
 npm run dev
 ```
 
-Open <http://localhost:5173>. The backend health endpoint is available at <http://localhost:3000/>.
+Then open:
 
-## Frontend Checks
+- Frontend: http://localhost:5173
+- Backend health check: http://localhost:3000/
 
-Run these from `Frontend/`:
+## Useful Commands
+
+From the `Frontend` directory:
 
 ```bash
-npm run lint
+npm run dev
 npm run build
+npm run lint
 ```
 
-## Current Development Status
+## Current Status
 
-- The home screen accepts a nickname, but its Play and Create Private Room buttons are placeholders and do not yet create or join rooms.
-- The play screen currently defaults to a fixed room ID; room selection and navigation are not connected to the home screen.
-- The backend has Socket.IO handlers for joining rooms, drawing, and chat, but room creation and a complete round/guessing flow are unfinished.
-- The backend currently allows the local Vite origin (`http://localhost:5173`) and the optional `frontend_URL` origin through Socket.IO CORS. Update the backend CORS configuration as well if you host the frontend elsewhere.
+This project is currently in an early prototype stage. Core gameplay pieces are in place, but some flows are still incomplete or placeholder-based, including:
+
+- room creation and join flows may still be in progress
+- the app currently relies on a default room ID in some areas
+- additional game-state logic, round progression, and full multiplayer polish are still being developed
+
+## Notes
+
+- The backend is configured to allow the local Vite app origin (`http://localhost:5173`) and any value provided in `frontend_URL`.
+- If you host the frontend elsewhere, update the CORS configuration in `Backend/src/app.js` accordingly.
 
 ## License
 
